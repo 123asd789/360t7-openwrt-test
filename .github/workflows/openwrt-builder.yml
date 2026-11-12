@@ -51,8 +51,6 @@ jobs:
         # 我们这里先尝试安全应用，如果失败则跳过，靠菜单或原生配置生成。
         patch -p1 --forward --reject-file=- < ../custom/filogic.mk.patch || echo "Some hunks in filogic.mk skipped, checking native support..."
         
-        # 3. 复制您的 .config 文件到源码根目录
-        cp ../custom/.config .config
 
     - name: Configure and Download Feeds
       run: |
