@@ -3,10 +3,10 @@ name: Build 360T7 U-Boot Layout Firmware
 on:
   workflow_dispatch:
     inputs:
-      openwrt_version:
-        description: 'OpenWrt Version (e.g., v24.10.0 or snapshot)'
+      branch:
+        description: 'OpenWrt Branch (e.g., main or openwrt-24.10)'
         required: true
-        default: 'snapshot'
+        default: 'main'
 
 jobs:
   build:
@@ -16,46 +16,65 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Initialization Environment
+    - name: Free Up Disk Space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: false
+        dotnet: false
+        haskell: false
+        large-storage: false
+        docker-images: false
+
+    - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential libncurses5-dev gawk git subversion libssl-dev xsltproc libxml-parser-perl libelf-dev unzip zlib1g-dev wget python3 python3-setuptools swig rsync bc
         sudo timedatectl set-timezone "Asia/Shanghai"
 
-    - name: Download OpenWrt Image Builder
+    - name: Clone OpenWrt Source
       run: |
-        # 以 MediaTek Filogic 架构为例 (根据实际 OpenWrt 版本调整下载链接)
-        # 此处以 snapshot 的 mediatek/filogic 为例
-        wget https://downloads.openwrt.org/snapshots/targets/mediatek/filogic/openwrt-imagebuilder-mediatek-filogic.Linux-x86_64.tar.xz
-        tar -xJf openwrt-imagebuilder-*.tar.xz
-        mv openwrt-imagebuilder-* builder
-        cd builder
-        
-        # 清理并准备替换定制的 DTS 和 Makefile 规则
-        # 将您修改好的 DTS 放入 builder/target/linux/mediatek/dts/
-        # 将 filogic.mk 的修改应用进去
+        git clone https://github.com/openwrt/openwrt.git openwrt
+        cd openwrt
+        # 如果需要特定分支可以切换，例如: git checkout openwrt-24.10
 
-    - name: Inject Custom DTS & Rules
+    - name: Inject Custom Files & Patches
       run: |
-        cd builder
-        # 将仓库中的自定义 DTS 复制到 Image Builder 的 dts 目录
+        cd openwrt
+        
+        # 1. 将自定义的 DTS 文件复制到源码目录
         cp ../custom/mt7981b-qihoo-360t7.dts target/linux/mediatek/dts/
         cp ../custom/mt7981b-qihoo-360t7-common.dtsi target/linux/mediatek/dts/
         
-        # 将 filogic.mk 的修改补丁打入
+        # 2. 打入 filogic.mk 的 patch
         patch -p1 < ../custom/filogic.mk.patch
+        
+        # 3. 复制您的 .config 文件到源码根目录
+        cp ../custom/.config .config
 
-    - name: Build Firmware
+    - name: Configure and Download Feeds
       run: |
-        cd builder
-        # 执行 make image 编译出 360T7 (uboot layout) 的固件
-        # 包含了必要的驱动和自定义打包
-        make image PROFILE="qihoo_360t7" PACKAGES="kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware luci"
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        
+        # 使 .config 生效并补全依赖
+        make defconfig
+
+    - name: Compile Firmware
+      run: |
+        cd openwrt
+        # 多线程编译 (V=s 开启详细日志方便报错排查)
+        make -j$(nproc) || make -j1 V=s
+
+    - name: Organize Files and Upload
+      run: |
+        mkdir -p final_firmware
+        cp openwrt/bin/targets/mediatek/filogic/*.bin final_firmware/ || true
+        cp openwrt/bin/targets/mediatek/filogic/*.tar final_firmware/ || true
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: openwrt-360t7-uboot-factory
-        path: |
-          builder/bin/targets/mediatek/filogic/*.bin
-          builder/bin/targets/mediatek/filogic/*.tar
+        name: openwrt-360t7-uboot-firmware
+        path: final_firmware/*
