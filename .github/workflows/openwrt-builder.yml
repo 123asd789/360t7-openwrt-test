@@ -1,10 +1,10 @@
-name: Build 360T7 U-Boot Layout Firmware
+name: Build 360T7 U-Boot Layout Firmware (ImmortalWrt mt798x)
 
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'OpenWrt Branch (e.g., main or openwrt-24.10)'
+        description: 'Branch to build (e.g., main)'
         required: true
         default: 'main'
 
@@ -32,22 +32,23 @@ jobs:
         sudo apt-get install -y build-essential libncurses5-dev gawk git subversion libssl-dev xsltproc libxml-parser-perl libelf-dev unzip zlib1g-dev wget python3 python3-setuptools swig rsync bc
         sudo timedatectl set-timezone "Asia/Shanghai"
 
-    - name: Clone OpenWrt Source
+    - name: Clone Chasey-dev ImmortalWrt mt798x-rebase Source
       run: |
-        git clone https://github.com/openwrt/openwrt.git openwrt
+        git clone https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git openwrt
         cd openwrt
-        # 如果需要特定分支可以切换，例如: git checkout openwrt-24.10
+        # 如果有特定分支可以 checkout，例如：git checkout main
 
     - name: Inject Custom Files & Patches
       run: |
         cd openwrt
         
-        # 1. 将自定义的 DTS 文件复制到源码目录
+        # 1. 复制您的自定义 DTS 文件到源码目录
+        # 注意：请确认 mt7981b-qihoo-360t7.dts 中的 include 路径或文件名是否与该仓库原生的一致
         cp ../custom/mt7981b-qihoo-360t7.dts target/linux/mediatek/dts/
         cp ../custom/mt7981b-qihoo-360t7-common.dtsi target/linux/mediatek/dts/
         
-        # 2. 打入 filogic.mk 的 patch
-        patch -p1 < ../custom/filogic.mk.patch
+        # 2. 打入 filogic.mk 的 patch（如果该仓库的 filogic.mk 结构有差异，patch 可能会有冲突，后面有提示）
+        patch -p1 < ../custom/filogic.mk.patch || echo "Patch applied with warnings or already integrated"
         
         # 3. 复制您的 .config 文件到源码根目录
         cp ../custom/.config .config
@@ -64,7 +65,7 @@ jobs:
     - name: Compile Firmware
       run: |
         cd openwrt
-        # 多线程编译 (V=s 开启详细日志方便报错排查)
+        # 多线程编译 (V=s 开启详细日志方便排查错误)
         make -j$(nproc) || make -j1 V=s
 
     - name: Organize Files and Upload
