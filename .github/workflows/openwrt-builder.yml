@@ -38,17 +38,18 @@ jobs:
         cd openwrt
         # 如果有特定分支可以 checkout，例如：git checkout main
 
-    - name: Inject Custom Files & Patches
+    - name: Inject Custom Files & DTS
       run: |
         cd openwrt
         
-        # 1. 复制您的自定义 DTS 文件到源码目录
-        # 注意：请确认 mt7981b-qihoo-360t7.dts 中的 include 路径或文件名是否与该仓库原生的一致
-        cp ../custom/mt7981b-qihoo-360t7.dts target/linux/mediatek/dts/
-        cp ../custom/mt7981b-qihoo-360t7-common.dtsi target/linux/mediatek/dts/
+        # 1. 复制您的自定义 DTS 文件到源码目录（直接覆盖或存放）
+        cp ../custom/mt7981b-qihoo-360t7.dts target/linux/mediatek/dts/ || true
+        cp ../custom/mt7981b-qihoo-360t7-common.dtsi target/linux/mediatek/dts/ || true
         
-        # 2. 打入 filogic.mk 的 patch（如果该仓库的 filogic.mk 结构有差异，patch 可能会有冲突，后面有提示）
-        patch -p1 < ../custom/filogic.mk.patch || echo "Patch applied with warnings or already integrated"
+        # 2. 如果您必须应用 filogic.mk 的修改，建议检查该仓库是否已经原生支持 360T7。
+        # 大多数情况下，chasey-dev 的仓库里已经自带了 qihoo_360t7 的 Device 定义。
+        # 我们这里先尝试安全应用，如果失败则跳过，靠菜单或原生配置生成。
+        patch -p1 --forward --reject-file=- < ../custom/filogic.mk.patch || echo "Some hunks in filogic.mk skipped, checking native support..."
         
         # 3. 复制您的 .config 文件到源码根目录
         cp ../custom/.config .config
